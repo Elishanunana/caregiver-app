@@ -4,18 +4,15 @@ import 'data/repositories/elder_profile_repository.dart';
 import 'data/repositories/event_log_repository.dart';
 import 'data/repositories/medication_schedule_repository.dart';
 import 'data/repositories/sync_queue_repository.dart';
+import 'screens/settings_screen.dart';
+import 'services/secure_settings_service.dart';
 
-/// Root application widget.
-///
-/// For Task 16, this renders an updated bootstrap screen that displays
-/// live counts from each repository — proof that the seeder ran and
-/// the data layer is functioning end-to-end. Subsequent tasks replace
-/// this scaffold with the real navigation tree.
 class CaregiverApp extends StatelessWidget {
   final ElderProfileRepository elderRepo;
   final MedicationScheduleRepository scheduleRepo;
   final EventLogRepository eventRepo;
   final SyncQueueRepository syncRepo;
+  final SecureSettingsService settings;
 
   const CaregiverApp({
     super.key,
@@ -23,6 +20,7 @@ class CaregiverApp extends StatelessWidget {
     required this.scheduleRepo,
     required this.eventRepo,
     required this.syncRepo,
+    required this.settings,
   });
 
   @override
@@ -41,6 +39,7 @@ class CaregiverApp extends StatelessWidget {
         elderRepo: elderRepo,
         scheduleRepo: scheduleRepo,
         eventRepo: eventRepo,
+        settings: settings,
       ),
     );
   }
@@ -50,11 +49,13 @@ class _BootstrapScreen extends StatelessWidget {
   final ElderProfileRepository elderRepo;
   final MedicationScheduleRepository scheduleRepo;
   final EventLogRepository eventRepo;
+  final SecureSettingsService settings;
 
   const _BootstrapScreen({
     required this.elderRepo,
     required this.scheduleRepo,
     required this.eventRepo,
+    required this.settings,
   });
 
   @override
@@ -71,33 +72,24 @@ class _BootstrapScreen extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.health_and_safety_rounded,
-                  size: 72,
-                  color: colors.primary,
-                ),
+                Icon(Icons.health_and_safety_rounded,
+                    size: 72, color: colors.primary),
                 const SizedBox(height: 20),
-                Text(
-                  'Caregiver Companion',
-                  style: text.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                Text('Caregiver Companion',
+                    style: text.headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 6),
-                Text(
-                  'KNUST COE 497',
-                  style: text.bodyMedium?.copyWith(
-                    color: colors.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 40),
+                Text('KNUST COE 497',
+                    style: text.bodyMedium
+                        ?.copyWith(color: colors.onSurfaceVariant)),
+                const SizedBox(height: 36),
                 _StatusChip(
                   label: 'Local store ready',
                   icon: Icons.check_circle_rounded,
                   colors: colors,
                 ),
                 const SizedBox(height: 12),
-                if (elder != null) ...[
+                if (elder != null)
                   _DataCard(
                     elderName: elder.name,
                     scheduleCount: scheduleRepo.count,
@@ -105,12 +97,18 @@ class _BootstrapScreen extends StatelessWidget {
                     colors: colors,
                     text: text,
                   ),
-                ] else
-                  _StatusChip(
-                    label: 'No elder profile yet',
-                    icon: Icons.person_off_rounded,
-                    colors: colors,
-                  ),
+                const SizedBox(height: 24),
+                FilledButton.tonalIcon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => SettingsScreen(settings: settings),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.settings_rounded),
+                  label: const Text('Hub Connection'),
+                ),
               ],
             ),
           ),
@@ -144,13 +142,11 @@ class _StatusChip extends StatelessWidget {
         children: [
           Icon(icon, color: colors.primary, size: 20),
           const SizedBox(width: 10),
-          Text(
-            label,
-            style: TextStyle(
-              color: colors.onPrimaryContainer,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
+          Text(label,
+              style: TextStyle(
+                color: colors.onPrimaryContainer,
+                fontWeight: FontWeight.w500,
+              )),
         ],
       ),
     );
@@ -183,54 +179,34 @@ class _DataCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.person_rounded,
-                  color: colors.primary, size: 22),
-              const SizedBox(width: 10),
-              Text(
-                elderName,
-                style: text.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
+          Row(children: [
+            Icon(Icons.person_rounded, color: colors.primary, size: 22),
+            const SizedBox(width: 10),
+            Text(elderName,
+                style: text.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w600)),
+          ]),
           const SizedBox(height: 14),
-          _statRow(
-            icon: Icons.medication_rounded,
-            label: 'Schedules',
-            value: '$scheduleCount',
-          ),
+          _statRow(Icons.medication_rounded, 'Schedules', '$scheduleCount'),
           const SizedBox(height: 6),
-          _statRow(
-            icon: Icons.history_rounded,
-            label: 'Events',
-            value: '$eventCount',
-          ),
+          _statRow(Icons.history_rounded, 'Events', '$eventCount'),
         ],
       ),
     );
   }
 
-  Widget _statRow({
-    required IconData icon,
-    required String label,
-    required String value,
-  }) {
+  Widget _statRow(IconData icon, String label, String value) {
     return Row(
       children: [
         Icon(icon, size: 18, color: colors.onSurfaceVariant),
         const SizedBox(width: 8),
         Text(label, style: text.bodyMedium),
         const Spacer(),
-        Text(
-          value,
-          style: text.titleMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: colors.primary,
-          ),
-        ),
+        Text(value,
+            style: text.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: colors.primary,
+            )),
       ],
     );
   }

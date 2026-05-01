@@ -1,7 +1,6 @@
 import '../data/entities/elder_profile.dart';
 import '../data/entities/event_log_entry.dart';
 import '../data/entities/medication_schedule.dart';
-import '../data/entities/sync_queue_entry.dart';
 import '../data/repositories/elder_profile_repository.dart';
 import '../data/repositories/event_log_repository.dart';
 import '../data/repositories/medication_schedule_repository.dart';
