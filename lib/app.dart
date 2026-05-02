@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import 'data/repositories/elder_profile_repository.dart';
 import 'data/repositories/event_log_repository.dart';
 import 'data/repositories/medication_schedule_repository.dart';
 import 'data/repositories/sync_queue_repository.dart';
 import 'screens/settings_screen.dart';
+import 'screens/today_screen.dart';
 import 'services/secure_settings_service.dart';
+import 'services/sync_state_notifier.dart';
 
 class CaregiverApp extends StatelessWidget {
   final ElderProfileRepository elderRepo;
@@ -25,21 +28,24 @@ class CaregiverApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Caregiver Companion',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1B5E20),
-          brightness: Brightness.light,
+    return ChangeNotifierProvider(
+      create: (_) => SyncStateNotifier(),
+      child: MaterialApp(
+        title: 'Caregiver Companion',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          useMaterial3: true,
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF1B5E20),
+            brightness: Brightness.light,
+          ),
         ),
-      ),
-      home: _BootstrapScreen(
-        elderRepo: elderRepo,
-        scheduleRepo: scheduleRepo,
-        eventRepo: eventRepo,
-        settings: settings,
+        home: _BootstrapScreen(
+          elderRepo: elderRepo,
+          scheduleRepo: scheduleRepo,
+          eventRepo: eventRepo,
+          settings: settings,
+        ),
       ),
     );
   }
@@ -83,31 +89,40 @@ class _BootstrapScreen extends StatelessWidget {
                     style: text.bodyMedium
                         ?.copyWith(color: colors.onSurfaceVariant)),
                 const SizedBox(height: 36),
-                _StatusChip(
-                  label: 'Local store ready',
-                  icon: Icons.check_circle_rounded,
-                  colors: colors,
+                if (elder != null)
+                  Text(
+                    'Caring for ${elder.name}',
+                    style: text.titleMedium?.copyWith(
+                      color: colors.primary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                const SizedBox(height: 28),
+                _LauncherButton(
+                  icon: Icons.today_rounded,
+                  label: "Today's Overview",
+                  isPrimary: true,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => TodayScreen(
+                        elderRepo: elderRepo,
+                        scheduleRepo: scheduleRepo,
+                        eventRepo: eventRepo,
+                        settings: settings,
+                      ),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 12),
-                if (elder != null)
-                  _DataCard(
-                    elderName: elder.name,
-                    scheduleCount: scheduleRepo.count,
-                    eventCount: eventRepo.count,
-                    colors: colors,
-                    text: text,
+                _LauncherButton(
+                  icon: Icons.settings_rounded,
+                  label: 'Hub Connection',
+                  isPrimary: false,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => SettingsScreen(settings: settings),
+                    ),
                   ),
-                const SizedBox(height: 24),
-                FilledButton.tonalIcon(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => SettingsScreen(settings: settings),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.settings_rounded),
-                  label: const Text('Hub Connection'),
                 ),
               ],
             ),
@@ -118,96 +133,40 @@ class _BootstrapScreen extends StatelessWidget {
   }
 }
 
-class _StatusChip extends StatelessWidget {
-  final String label;
+class _LauncherButton extends StatelessWidget {
   final IconData icon;
-  final ColorScheme colors;
+  final String label;
+  final bool isPrimary;
+  final VoidCallback onTap;
 
-  const _StatusChip({
-    required this.label,
+  const _LauncherButton({
     required this.icon,
-    required this.colors,
+    required this.label,
+    required this.isPrimary,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      decoration: BoxDecoration(
-        color: colors.primaryContainer,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: colors.primary, size: 20),
-          const SizedBox(width: 10),
-          Text(label,
-              style: TextStyle(
-                color: colors.onPrimaryContainer,
-                fontWeight: FontWeight.w500,
-              )),
-        ],
-      ),
-    );
-  }
-}
-
-class _DataCard extends StatelessWidget {
-  final String elderName;
-  final int scheduleCount;
-  final int eventCount;
-  final ColorScheme colors;
-  final TextTheme text;
-
-  const _DataCard({
-    required this.elderName,
-    required this.scheduleCount,
-    required this.eventCount,
-    required this.colors,
-    required this.text,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            Icon(Icons.person_rounded, color: colors.primary, size: 22),
-            const SizedBox(width: 10),
-            Text(elderName,
-                style: text.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w600)),
-          ]),
-          const SizedBox(height: 14),
-          _statRow(Icons.medication_rounded, 'Schedules', '$scheduleCount'),
-          const SizedBox(height: 6),
-          _statRow(Icons.history_rounded, 'Events', '$eventCount'),
-        ],
-      ),
-    );
-  }
-
-  Widget _statRow(IconData icon, String label, String value) {
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: colors.onSurfaceVariant),
-        const SizedBox(width: 8),
-        Text(label, style: text.bodyMedium),
-        const Spacer(),
-        Text(value,
-            style: text.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: colors.primary,
-            )),
-      ],
+    return SizedBox(
+      width: 240,
+      child: isPrimary
+          ? FilledButton.icon(
+              onPressed: onTap,
+              icon: Icon(icon),
+              label: Text(label),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+            )
+          : FilledButton.tonalIcon(
+              onPressed: onTap,
+              icon: Icon(icon),
+              label: Text(label),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+            ),
     );
   }
 }
