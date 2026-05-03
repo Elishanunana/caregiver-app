@@ -46,3 +46,9 @@ app.*.map.json
 
 # Test isolation directories created by Hive in-memory test setup
 .test_hive_*/
+
+# Gradle build outputs
+/android/build/
+/android/.gradle/
+/android/captures/
+/android/local.properties
