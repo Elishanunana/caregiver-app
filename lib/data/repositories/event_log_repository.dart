@@ -46,6 +46,26 @@ class EventLogRepository extends BaseRepository<EventLogEntry> {
         .toList(growable: false);
   }
 
+  /// Events whose timestamp falls within [start, end] inclusive of [start]
+  /// and exclusive of [end]. Both bounds are interpreted as UTC.
+  /// Returns newest-first; safe on empty boxes.
+  List<EventLogEntry> listInRange({
+    required DateTime start,
+    required DateTime end,
+  }) {
+    final startIso = start.toUtc().toIso8601String();
+    final endIso   = end.toUtc().toIso8601String();
+    final result = box.values
+        .where((e) {
+          final ts = e.timestamp;
+          if (ts == null || ts.isEmpty) return false;
+          return ts.compareTo(startIso) >= 0 && ts.compareTo(endIso) < 0;
+        })
+        .toList(growable: true);
+    result.sort((a, b) => (b.timestamp ?? '').compareTo(a.timestamp ?? ''));
+    return result;
+  }
+
   /// Insert a record arrived from the hub. The hub-assigned `eventId`
   /// becomes the Hive key, so a duplicate transmission overwrites
   /// rather than creating a second copy — this is the idempotency

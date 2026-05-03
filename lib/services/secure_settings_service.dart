@@ -16,6 +16,8 @@ import '../core/constants/api_constants.dart';
 class SecureSettingsService {
   static const _keyHubUrl       = 'hub_url';
   static const _keyPairingToken = 'pairing_token';
+  static const _keyPharmacistPin = 'pharmacist_pin';
+  static const _keyHubSimNumber  = 'hub_sim_number';
 
   final FlutterSecureStorage _storage;
 
@@ -46,5 +48,40 @@ class SecureSettingsService {
   Future<void> reset() async {
     await _storage.delete(key: _keyHubUrl);
     await _storage.delete(key: _keyPairingToken);
+    await _storage.delete(key: _keyPharmacistPin);
+    await _storage.delete(key: _keyHubSimNumber);
+  }
+
+  /// Persist the four-digit pharmacist PIN. Stored encrypted at rest.
+  /// Section 3.5.5 of the project report specifies this gate as a
+  /// protection against unauthorised modification of the schedule.
+  Future<void> setPharmacistPin(String pin) =>
+      _storage.write(key: _keyPharmacistPin, value: pin);
+
+  /// Read the configured PIN. Returns null if no PIN has been set yet,
+  /// in which case the Pharmacist Entry screen runs the first-time
+  /// setup flow.
+  Future<String?> getPharmacistPin() =>
+      _storage.read(key: _keyPharmacistPin);
+
+  /// True if a PIN has been configured. Convenience for the UI gate.
+  Future<bool> hasPharmacistPin() async {
+    final pin = await getPharmacistPin();
+    return pin != null && pin.isNotEmpty;
+  }
+
+  /// Persist the hub's GSM module phone number. The Pharmacist Entry
+  /// flow uses this as the SMS recipient. In a real deployment this is
+  /// captured during pairing; for development we let the caregiver set
+  /// it manually alongside the pairing token.
+  Future<void> setHubSimNumber(String number) =>
+      _storage.write(key: _keyHubSimNumber, value: number);
+
+  /// Read the hub's GSM phone number.
+  /// Falls back to a clearly-fake placeholder so a forgotten setup is
+  /// obvious to the demo audience rather than failing silently.
+  Future<String> getHubSimNumber() async {
+    return await _storage.read(key: _keyHubSimNumber) ??
+        '+233000000000'; // placeholder — see SettingsScreen.
   }
 }

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../core/constants/api_constants.dart';
 import '../services/hub_api_client.dart';
 import '../services/secure_settings_service.dart';
 
@@ -22,6 +21,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final _hubUrlCtrl = TextEditingController();
   final _tokenCtrl = TextEditingController();
+  final _simNumberCtrl = TextEditingController();
 
   bool _loading = true;
   bool _testing = false;
@@ -36,10 +36,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadCurrent() async {
     final url = await widget.settings.getHubUrl();
     final token = await widget.settings.getPairingToken();
+    final sim = await widget.settings.getHubSimNumber();
     if (!mounted) return;
     setState(() {
       _hubUrlCtrl.text = url;
       _tokenCtrl.text = token;
+      _simNumberCtrl.text = sim;
       _loading = false;
     });
   }
@@ -47,6 +49,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _save() async {
     await widget.settings.setHubUrl(_hubUrlCtrl.text.trim());
     await widget.settings.setPairingToken(_tokenCtrl.text.trim());
+    await widget.settings.setHubSimNumber(_simNumberCtrl.text.trim());
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Settings saved.')),
@@ -82,6 +85,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _hubUrlCtrl.dispose();
     _tokenCtrl.dispose();
+    _simNumberCtrl.dispose();
     super.dispose();
   }
 
@@ -124,6 +128,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               hintText: 'Token issued during pairing',
             ),
           ),
+
+          const SizedBox(height: 18),
+          Text('Hub SIM Number', style: text.titleSmall),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _simNumberCtrl,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              hintText: '+233...',
+              helperText:
+                  'GSM number of the hub\'s SIM800L module. Used for the SMS sync pathway.',
+            ),
+          ),
+
           const SizedBox(height: 24),
           Row(
             children: [

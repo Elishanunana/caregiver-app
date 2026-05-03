@@ -23,7 +23,20 @@ Future<void> _setUpHive() async {
   await Hive.openBox<SyncQueueEntry>(HiveBoxes.syncQueueEntries);
 }
 
-Future<void> _tearDownHive() async => await Hive.deleteFromDisk();
+Future<void> _tearDownHive() async {
+  // Close all open boxes first so Windows releases the file handles
+  // before we try to delete
+  // the directory. On Windows, deleteFromDisk
+  // alone races with the OS's lock-release timing.
+  await Hive.close();
+  // Best-effort cleanup; Windows occasionally still holds a handle for
+  // a few ms after close. The empty-directory residue is gitignored.
+  try {
+    await Hive.deleteFromDisk();
+  } catch (_) {
+    // Tolerate residual file-lock; subsequent tests use a unique path.
+  }
+}
 
 String _isoAt(DateTime day, int h, int m) {
   final t = DateTime(day.year, day.month, day.day, h, m);

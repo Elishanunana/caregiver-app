@@ -9,6 +9,8 @@ import 'screens/settings_screen.dart';
 import 'screens/today_screen.dart';
 import 'services/secure_settings_service.dart';
 import 'services/sync_state_notifier.dart';
+import 'screens/event_history_screen.dart';
+import 'screens/pharmacist_entry_screen.dart';
 
 class CaregiverApp extends StatelessWidget {
   final ElderProfileRepository elderRepo;
@@ -44,6 +46,7 @@ class CaregiverApp extends StatelessWidget {
           elderRepo: elderRepo,
           scheduleRepo: scheduleRepo,
           eventRepo: eventRepo,
+          syncRepo: syncRepo,
           settings: settings,
         ),
       ),
@@ -55,12 +58,14 @@ class _BootstrapScreen extends StatelessWidget {
   final ElderProfileRepository elderRepo;
   final MedicationScheduleRepository scheduleRepo;
   final EventLogRepository eventRepo;
+  final SyncQueueRepository syncRepo;
   final SecureSettingsService settings;
 
   const _BootstrapScreen({
     required this.elderRepo,
     required this.scheduleRepo,
     required this.eventRepo,
+    required this.syncRepo,
     required this.settings,
   });
 
@@ -113,6 +118,35 @@ class _BootstrapScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+                const SizedBox(height: 12),
+                _LauncherButton(
+                  icon: Icons.history_rounded,
+                  label: 'Event History',
+                  isPrimary: false,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => EventHistoryScreen(eventRepo: eventRepo),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+                _LauncherButton(
+                  icon: Icons.local_pharmacy_rounded,
+                  label: 'Pharmacist Entry',
+                  isPrimary: false,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => PharmacistEntryScreen(
+                        elderRepo: elderRepo,
+                        scheduleRepo: scheduleRepo,
+                        syncRepo: syncRepo,
+                        settings: settings,
+                      ),
+                    ),
+                  ),
+                ),
+
                 const SizedBox(height: 12),
                 _LauncherButton(
                   icon: Icons.settings_rounded,

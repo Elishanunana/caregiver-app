@@ -24,6 +24,16 @@ dependencies:
   # ── Secure storage for credentials ─────────────────────────────
   flutter_secure_storage: ^9.2.2
 
+  # ── External-app dispatch ──────────────────────────────────────
+  # Used to open the device's SMS composer with the hub's destination
+  # number and HMAC-signed payload pre-filled. The caregiver confirms
+  # transmission with one tap. This is the "remote SMS pathway" of the
+  # hybrid sync architecture (Section 3.5.4 of the project report).
+  url_launcher: ^6.3.1
+
+  # ── Crypto (HMAC-SHA256 for SMS payload signing) ───────────────
+  crypto: ^3.0.3
+
   # ── Utilities ──────────────────────────────────────────────────
   intl: ^0.19.0
   uuid: ^4.5.0
