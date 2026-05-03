@@ -119,11 +119,19 @@ class HubApiClient {
   /// Pull events the hub has marked as unsynced (Hub→App pathway).
   /// Returns the raw list of event JSON objects; the caller is
   /// responsible for inserting them into EventLogRepository.
-  Future<List<Map<String, dynamic>>> fetchUnsyncedEvents() async {
+  /// Pull events the hub has marked as unsynced (Hub→App pathway).
+  ///
+  /// Returns a paged response containing the event list and metadata
+  /// (the count returned, the server-side per-call limit). The caller
+  /// iterates `count == limit` to drain larger queues across multiple
+  /// calls, since the hub caps each response at its configured batch
+  /// limit (100 by default).
+  Future<UnsyncedEventsResponse> fetchUnsyncedEvents() async {
     final uri = Uri.parse(
         '$baseUrl${ApiConstants.basePath}${ApiConstants.eventsUnsynced}');
     final response = await _authenticatedGet(uri);
     final body = _decodeJson(response);
+
     final list = body['events'];
     if (list is! List) {
       throw const HubApiException(
@@ -131,15 +139,41 @@ class HubApiClient {
         'Expected events array in response body.',
       );
     }
-    return list.cast<Map<String, dynamic>>();
+    final count = (body['count'] as int?) ?? list.length;
+    final limit = (body['limit'] as int?) ?? list.length;
+
+    return UnsyncedEventsResponse(
+      events: list.cast<Map<String, dynamic>>(),
+      count: count,
+      limit: limit,
+    );
   }
 
   /// Acknowledge events the app has successfully applied.
   /// The hub flips their synced_flag = 1 server-side.
-  Future<void> ackEvents(List<int> eventIds) async {
+  /// Acknowledge events the app has successfully applied.
+  /// Returns the structured per-event results — useful for diagnostics
+  /// and for surfacing SOS-acknowledgement signals to the UI.
+  Future<AckResponse> ackEvents(List<int> eventIds) async {
     final uri = Uri.parse(
         '$baseUrl${ApiConstants.basePath}${ApiConstants.eventsAck}');
-    await _authenticatedPost(uri, {'event_ids': eventIds});
+    final response = await _authenticatedPost(uri, {'event_ids': eventIds});
+    final body = _decodeJson(response);
+
+    final results = body['results'];
+    if (results is! List) {
+      throw const HubApiException(
+        HubApiErrorKind.malformedResponse,
+        'Expected results array in ack response.',
+      );
+    }
+    return AckResponse(
+      acknowledgedAt: body['acknowledged_at'] as String?,
+      results: results
+          .cast<Map<String, dynamic>>()
+          .map(AckResult.fromJson)
+          .toList(growable: false),
+    );
   }
 
   /// Push a batch of schedule changes from the app to the hub.
@@ -234,4 +268,59 @@ class HubApiClient {
   /// Release any underlying HTTP resources. Call when the client is
   /// no longer needed (typically only on app shutdown).
   void close() => _client.close();
+}
+
+/// Wrapper for the paged /events/unsynced response.
+class UnsyncedEventsResponse {
+  /// The events in this batch.
+  final List<Map<String, dynamic>> events;
+
+  /// Number of events the hub returned in this call.
+  final int count;
+
+  /// Server-side per-call cap. If `count == limit`, more events may be
+  /// available — the caller should issue another fetch after acking.
+  final int limit;
+
+  const UnsyncedEventsResponse({
+    required this.events,
+    required this.count,
+    required this.limit,
+  });
+
+  /// True if this response may not have drained the hub's queue.
+  bool get hasMore => count >= limit;
+}
+
+/// Wrapper for the /events/ack response.
+class AckResponse {
+  final String? acknowledgedAt;
+  final List<AckResult> results;
+
+  const AckResponse({
+    required this.acknowledgedAt,
+    required this.results,
+  });
+}
+
+/// One per-event entry in the AckResponse.results array.
+class AckResult {
+  final int eventId;
+  final String eventType;
+  final String status;          // 'acknowledged' | 'already_synced' | etc.
+  final bool sosAcknowledged;
+
+  const AckResult({
+    required this.eventId,
+    required this.eventType,
+    required this.status,
+    required this.sosAcknowledged,
+  });
+
+  factory AckResult.fromJson(Map<String, dynamic> j) => AckResult(
+        eventId: (j['event_id'] as int?) ?? 0,
+        eventType: (j['event_type'] as String?) ?? '',
+        status: (j['status'] as String?) ?? 'unknown',
+        sosAcknowledged: (j['sos_acknowledged'] as bool?) ?? false,
+      );
 }

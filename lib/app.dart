@@ -11,6 +11,7 @@ import 'services/secure_settings_service.dart';
 import 'services/sync_state_notifier.dart';
 import 'screens/event_history_screen.dart';
 import 'screens/pharmacist_entry_screen.dart';
+import 'services/sync_engine.dart';
 
 class CaregiverApp extends StatelessWidget {
   final ElderProfileRepository elderRepo;
@@ -18,6 +19,8 @@ class CaregiverApp extends StatelessWidget {
   final EventLogRepository eventRepo;
   final SyncQueueRepository syncRepo;
   final SecureSettingsService settings;
+  final SyncEngine syncEngine;
+  final SyncStateNotifier syncStateNotifier;
 
   const CaregiverApp({
     super.key,
@@ -26,12 +29,17 @@ class CaregiverApp extends StatelessWidget {
     required this.eventRepo,
     required this.syncRepo,
     required this.settings,
+    required this.syncEngine,
+    required this.syncStateNotifier,
   });
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => SyncStateNotifier(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: syncStateNotifier),
+        Provider<SyncEngine>.value(value: syncEngine),
+      ],
       child: MaterialApp(
         title: 'Caregiver Companion',
         debugShowCheckedModeBanner: false,

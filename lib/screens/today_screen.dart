@@ -6,8 +6,8 @@ import '../data/repositories/elder_profile_repository.dart';
 import '../data/repositories/event_log_repository.dart';
 import '../data/repositories/medication_schedule_repository.dart';
 import '../data/values/dose_status.dart';
-import '../services/hub_api_client.dart';
 import '../services/secure_settings_service.dart';
+import '../services/sync_engine.dart';
 import '../services/sync_state_notifier.dart';
 import '../services/today_status_service.dart';
 
@@ -24,9 +24,9 @@ import '../services/today_status_service.dart';
 ///   4. Last-sync footer — small metadata strip showing the last
 ///      successful sync timestamp.
 ///
-/// Pull-to-refresh hits /health on the configured hub. A real hub
-/// pull (events/unsynced + ack) is wired in Task 21; for Task 18 we
-/// only verify reachability so the user sees a recent timestamp.
+/// Pull-to-refresh delegates to the SyncEngine, which runs a full
+/// sync cycle (health probe → fetch unsynced → apply → ack) bypassing
+/// any cooldown the arbiter may be enforcing.
 class TodayScreen extends StatefulWidget {
   final ElderProfileRepository elderRepo;
   final MedicationScheduleRepository scheduleRepo;
@@ -58,26 +58,7 @@ class _TodayScreenState extends State<TodayScreen> {
   }
 
   Future<void> _refresh() async {
-    final notifier = context.read<SyncStateNotifier>();
-    notifier.beginSync();
-
-    final url   = await widget.settings.getHubUrl();
-    final token = await widget.settings.getPairingToken();
-    final client = HubApiClient(baseUrl: url, pairingToken: token);
-    final result = await client.checkHealth();
-    client.close();
-
-    notifier.endSync(
-      ok: result.isHealthy,
-      message: result.errorMessage,
-    );
-
-    if (!mounted) return;
-    if (!result.isHealthy) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.errorMessage ?? 'Sync failed')),
-      );
-    }
+    await context.read<SyncEngine>().clearCooldownAndRunNow();
   }
 
   @override
@@ -394,9 +375,12 @@ class _LastSyncFooter extends StatelessWidget {
     return Consumer<SyncStateNotifier>(
       builder: (_, n, __) {
         final ts = n.lastSyncAt;
-        final label = ts == null
+        final base = ts == null
             ? 'Never synced'
-            : 'Last synced at ${_fmt(ts)} (${n.lastSyncResult ?? "—"})';
+            : 'Last synced at ${_fmt(ts)} — ${n.statusLabel}';
+        final extra = n.lastApplied > 0
+            ? '  •  ${n.lastApplied} new'
+            : '';
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Row(
@@ -406,7 +390,7 @@ class _LastSyncFooter extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  label,
+                  '$base$extra',
                   style: text.bodySmall?.copyWith(
                     color: colors.onSurfaceVariant,
                   ),

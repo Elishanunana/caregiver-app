@@ -69,7 +69,7 @@ void main() {
       final mock = MockClient();
       when(mock.get(any, headers: anyNamed('headers')))
           .thenAnswer((_) async => http.Response(
-                jsonEncode({'events': []}),
+                jsonEncode({'count': 0, 'limit': 100, 'events': []}),
                 200,
               ));
       final client = HubApiClient(
@@ -125,6 +125,8 @@ void main() {
       when(mock.get(any, headers: anyNamed('headers')))
           .thenAnswer((_) async => http.Response(
                 jsonEncode({
+                  'count': 2,
+                  'limit': 100,
                   'events': [
                     {'event_id': 1, 'event_type': 'reminder_dose_due'},
                     {'event_id': 2, 'event_type': 'dose_confirmed'},
@@ -135,9 +137,12 @@ void main() {
       final client = HubApiClient(
           baseUrl: baseUrl, pairingToken: token, client: mock);
 
-      final events = await client.fetchUnsyncedEvents();
-      expect(events.length, 2);
-      expect(events.first['event_id'], 1);
+      final response = await client.fetchUnsyncedEvents();
+      expect(response.events.length, 2);
+      expect(response.events.first['event_id'], 1);
+      expect(response.count, 2);
+      expect(response.limit, 100);
+      expect(response.hasMore, isFalse);
     });
 
     test('fetchUnsyncedEvents throws malformed on missing events array',
