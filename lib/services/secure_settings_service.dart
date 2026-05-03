@@ -18,6 +18,7 @@ class SecureSettingsService {
   static const _keyPairingToken = 'pairing_token';
   static const _keyPharmacistPin = 'pharmacist_pin';
   static const _keyHubSimNumber  = 'hub_sim_number';
+  static const _keyPairedFlag = 'paired_flag';
 
   final FlutterSecureStorage _storage;
 
@@ -50,6 +51,7 @@ class SecureSettingsService {
     await _storage.delete(key: _keyPairingToken);
     await _storage.delete(key: _keyPharmacistPin);
     await _storage.delete(key: _keyHubSimNumber);
+    await _storage.delete(key: _keyPairedFlag);
   }
 
   /// Persist the four-digit pharmacist PIN. Stored encrypted at rest.
@@ -84,4 +86,15 @@ class SecureSettingsService {
     return await _storage.read(key: _keyHubSimNumber) ??
         '+233000000000'; // placeholder — see SettingsScreen.
   }
+
+  /// True if the device has completed a successful pairing.
+  /// False on first install or after a reset/re-pair action.
+  Future<bool> isPaired() async {
+    return await _storage.read(key: _keyPairedFlag) == 'true';
+  }
+
+  /// Mark the device as successfully paired. Set only after the pairing
+  /// flow has verified the credentials against the live hub.
+  Future<void> markPaired() =>
+      _storage.write(key: _keyPairedFlag, value: 'true');
 }

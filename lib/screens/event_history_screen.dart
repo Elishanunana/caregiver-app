@@ -4,7 +4,8 @@ import '../data/entities/event_log_entry.dart';
 import '../data/repositories/event_log_repository.dart';
 import '../data/values/event_type_meta.dart';
 import '../data/values/values.dart';
-
+import '../services/secure_settings_service.dart';
+import '_app_bar_actions.dart';
 /// Event History — a chronological, filterable audit log of all events
 /// the app has received from the hub.
 ///
@@ -24,8 +25,13 @@ import '../data/values/values.dart';
 /// in place and start showing accurate per-event values then.
 class EventHistoryScreen extends StatefulWidget {
   final EventLogRepository eventRepo;
+  final SecureSettingsService settings;
 
-  const EventHistoryScreen({super.key, required this.eventRepo});
+  const EventHistoryScreen({
+    super.key,
+    required this.eventRepo,
+    required this.settings,
+  });
 
   @override
   State<EventHistoryScreen> createState() => _EventHistoryScreenState();
@@ -105,6 +111,7 @@ class _EventHistoryScreenState extends State<EventHistoryScreen> {
             tooltip: 'Filter',
             onPressed: _openFilters,
           ),
+          CommonAppBarActions(settings: widget.settings),
         ],
       ),
       body: events.isEmpty

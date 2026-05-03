@@ -10,6 +10,7 @@ import '../services/secure_settings_service.dart';
 import '../services/sync_engine.dart';
 import '../services/sync_state_notifier.dart';
 import '../services/today_status_service.dart';
+import '_app_bar_actions.dart';
 
 /// Today's Overview — the caregiver's daily glance at the elder's
 /// medication adherence and any unacknowledged emergencies.
@@ -98,6 +99,7 @@ class _TodayScreenState extends State<TodayScreen> {
               onPressed: n.isSyncing ? null : _refresh,
             ),
           ),
+          CommonAppBarActions(settings: widget.settings),
         ],
       ),
       body: RefreshIndicator(

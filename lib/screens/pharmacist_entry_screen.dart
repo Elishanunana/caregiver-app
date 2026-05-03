@@ -10,7 +10,7 @@ import '../services/secure_settings_service.dart';
 import '../services/sms_dispatcher.dart';
 import '../services/sms_payload_builder.dart';
 import 'pin_widgets.dart';
-
+import '_app_bar_actions.dart';
 /// Pharmacist Entry — the App→Hub data-entry pathway described in
 /// Section 3.5.5 of the project report.
 ///
@@ -219,7 +219,12 @@ class _PharmacistEntryScreenState extends State<PharmacistEntryScreen> {
     final text = Theme.of(context).textTheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Pharmacist Entry')),
+      appBar: AppBar(
+        title: const Text('Pharmacist Entry'),
+        actions: [
+          CommonAppBarActions(settings: widget.settings),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [

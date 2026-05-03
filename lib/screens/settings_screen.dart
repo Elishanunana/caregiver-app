@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../services/hub_api_client.dart';
 import '../services/secure_settings_service.dart';
+import 'about_screen.dart';
+import 'pairing_screen.dart';
 
 /// Hub connection settings.
 ///
@@ -53,6 +55,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Settings saved.')),
+    );
+  }
+
+  Future<void> _confirmAndReset() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Reset & Re-pair?'),
+        content: const Text(
+          'This will wipe the saved hub URL, pairing token, SIM number, '
+          'and pharmacist PIN. The local data store and event history '
+          'are preserved. You will be returned to the pairing flow.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    await widget.settings.reset();
+    if (!mounted) return;
+
+    // Pop everything down to the root pairing flow.
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => PairingScreen(
+          settings: widget.settings,
+          onPaired: () {
+            // After re-pairing, replace the pairing screen with main.
+            // Caller will be the root navigator at this point.
+            Navigator.of(context).pop();
+          },
+        ),
+      ),
+      (route) => false,
     );
   }
 
@@ -171,6 +217,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 24),
           if (_lastResult != null) _buildResultCard(_lastResult!, colors, text),
+
+          const SizedBox(height: 32),
+          const Divider(),
+          const SizedBox(height: 8),
+
+          ListTile(
+            leading: const Icon(Icons.info_outline_rounded),
+            title: const Text('About'),
+            subtitle: const Text('Project, team, and system info'),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const AboutScreen(),
+              ),
+            ),
+          ),
+
+          ListTile(
+            leading: Icon(Icons.refresh_rounded,
+                color: Theme.of(context).colorScheme.error),
+            title: Text(
+              'Reset & Re-pair',
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+            subtitle: const Text(
+              'Wipe credentials and start the pairing flow again',
+            ),
+            onTap: _confirmAndReset,
+          ),
         ],
       ),
     );
