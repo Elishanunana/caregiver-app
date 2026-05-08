@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../app.dart';
 import '../services/hub_api_client.dart';
 import '../services/secure_settings_service.dart';
 import 'about_screen.dart';
-import 'pairing_screen.dart';
 
 /// Hub connection settings.
 ///
@@ -86,20 +86,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await widget.settings.reset();
     if (!mounted) return;
 
-    // Pop everything down to the root pairing flow.
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (_) => PairingScreen(
-          settings: widget.settings,
-          onPaired: () {
-            // After re-pairing, replace the pairing screen with main.
-            // Caller will be the root navigator at this point.
-            Navigator.of(context).pop();
-          },
-        ),
-      ),
-      (route) => false,
-    );
+    // Pop Settings off the stack first — otherwise the user sees Settings
+    // sitting on top of the (now-rebuilt) pairing screen and has to manually
+    // press back.
+    Navigator.of(context).pop();
+
+    // Now ask the root router to re-check pairing state. It will rebuild
+    // home → PairingScreen, which is now visible because Settings is gone.
+    rootRouterKey.currentState?.recheckPairing();
   }
 
   Future<void> _testConnection() async {

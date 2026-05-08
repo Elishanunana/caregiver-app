@@ -11,6 +11,8 @@ import 'services/secure_settings_service.dart';
 import 'services/sync_engine.dart';
 import 'services/sync_state_notifier.dart';
 
+final GlobalKey<_RootRouterState> rootRouterKey = GlobalKey<_RootRouterState>();
+
 class CaregiverApp extends StatelessWidget {
   final ElderProfileRepository elderRepo;
   final MedicationScheduleRepository scheduleRepo;
@@ -49,6 +51,7 @@ class CaregiverApp extends StatelessWidget {
           ),
         ),
         home: _RootRouter(
+          key: rootRouterKey,
           elderRepo: elderRepo,
           scheduleRepo: scheduleRepo,
           eventRepo: eventRepo,
@@ -70,6 +73,7 @@ class _RootRouter extends StatefulWidget {
   final SecureSettingsService settings;
 
   const _RootRouter({
+    super.key,
     required this.elderRepo,
     required this.scheduleRepo,
     required this.eventRepo,
@@ -98,6 +102,12 @@ class _RootRouterState extends State<_RootRouter> {
 
   void _onPaired() {
     setState(() => _isPaired = true);
+  }
+
+  /// Force a re-check of pairing state. Called after Reset & Re-pair.
+  void recheckPairing() {
+    setState(() => _isPaired = null);
+    _checkPairing();
   }
 
   @override
