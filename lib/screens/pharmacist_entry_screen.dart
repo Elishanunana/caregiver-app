@@ -6,11 +6,13 @@ import '../data/repositories/medication_schedule_repository.dart';
 import '../data/repositories/sync_queue_repository.dart';
 import '../data/entities/sync_queue_entry.dart';
 import '../data/values/values.dart';
+import '../services/pin_session_service.dart';
 import '../services/secure_settings_service.dart';
 import '../services/sms_dispatcher.dart';
 import '../services/sms_payload_builder.dart';
 import 'pin_widgets.dart';
 import '_app_bar_actions.dart';
+
 /// Pharmacist Entry — the App→Hub data-entry pathway described in
 /// Section 3.5.5 of the project report.
 ///
@@ -28,6 +30,7 @@ class PharmacistEntryScreen extends StatefulWidget {
   final MedicationScheduleRepository scheduleRepo;
   final SyncQueueRepository syncRepo;
   final SecureSettingsService settings;
+  final PinSessionService pinSession;
 
   const PharmacistEntryScreen({
     super.key,
@@ -35,13 +38,14 @@ class PharmacistEntryScreen extends StatefulWidget {
     required this.scheduleRepo,
     required this.syncRepo,
     required this.settings,
+    required this.pinSession,
   });
 
   @override
-  State<PharmacistEntryScreen> createState() => _PharmacistEntryScreenState();
+  State<PharmacistEntryScreen> createState() => PharmacistEntryScreenState();
 }
 
-class _PharmacistEntryScreenState extends State<PharmacistEntryScreen> {
+class PharmacistEntryScreenState extends State<PharmacistEntryScreen> {
   bool _gateChecked = false;
   bool _gateOpen = false;
 
@@ -51,14 +55,67 @@ class _PharmacistEntryScreenState extends State<PharmacistEntryScreen> {
   String _daysOfWeek = 'DAILY';
   bool _sending = false;
 
-
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _runPinGate());
+    // PIN gate is fired by MainScaffold when the user navigates to this
+    // tab — not on screen construction. PharmacistEntryScreen is built
+    // eagerly inside an IndexedStack, so initState fires at app launch
+    // for all three tabs simultaneously; firing the gate here would
+    // prompt the user before they've expressed intent to enter the
+    // pharmacist flow.
+  }
+
+  /// Synchronously hide the form. Called by MainScaffold when the user
+  /// navigates to this tab while the session is locked, so we don't
+  /// flash a populated form for one frame before the PIN dialog appears.
+  void hideFormForRelock() {
+    if (_gateOpen) {
+      setState(() => _gateOpen = false);
+    }
+  }
+
+  /// Public entry point for MainScaffold to trigger the PIN gate when
+  /// the user navigates to this tab. Idempotent — safe to call when the
+  /// gate is already open (the early-return on isUnlocked handles that).
+  Future<void> openIfNeeded() async {
+    // The session is the authoritative answer. If the session is locked
+    // (e.g., because the app was backgrounded), we re-fire the gate even
+    // if the form is currently visible — _gateOpen is a UI render flag,
+    // not a security boundary.
+    if (widget.pinSession.isUnlocked) {
+      // Make sure the UI matches the session state. If we got here from
+      // a stale-form path, this is a no-op; otherwise it reveals the form.
+      if (!_gateOpen) {
+        setState(() {
+          _gateChecked = true;
+          _gateOpen = true;
+        });
+      }
+      return;
+    }
+
+    // Session is locked. If the form is currently showing (stale), hide
+    // it before prompting — the dialog should appear over the locked
+    // state, not over a populated form the user shouldn't be looking at.
+    if (_gateOpen) {
+      setState(() => _gateOpen = false);
+    }
+
+    await _runPinGate();
   }
 
   Future<void> _runPinGate() async {
+    // Fast path: PIN already entered earlier in this session.
+    if (widget.pinSession.isUnlocked) {
+      if (!mounted) return;
+      setState(() {
+        _gateChecked = true;
+        _gateOpen = true;
+      });
+      return;
+    }
+
     final hasPin = await widget.settings.hasPharmacistPin();
     if (!mounted) return;
 
@@ -66,11 +123,17 @@ class _PharmacistEntryScreenState extends State<PharmacistEntryScreen> {
       final newPin = await PinSetupFlow.show(context);
       if (!mounted) return;
       if (newPin == null) {
-        Navigator.of(context).pop();
+        // User cancelled PIN setup. Render the locked state — they can
+        // try again by leaving and returning to the tab.
+        setState(() {
+          _gateChecked = true;
+          _gateOpen = false;
+        });
         return;
       }
       await widget.settings.setPharmacistPin(newPin);
       if (!mounted) return;
+      widget.pinSession.markUnlocked();
       setState(() {
         _gateChecked = true;
         _gateOpen = true;
@@ -83,13 +146,15 @@ class _PharmacistEntryScreenState extends State<PharmacistEntryScreen> {
     final unlocked = await PinEntryGate.show(context, pin);
     if (!mounted) return;
 
+    if (unlocked) {
+      widget.pinSession.markUnlocked();
+    }
     setState(() {
       _gateChecked = true;
       _gateOpen = unlocked;
     });
-    if (!unlocked) {
-      Navigator.of(context).pop();
-    }
+    // Note: no Navigator.pop() on failure. The user stays on the tab in
+    // its locked state; switching away and back re-fires the gate.
   }
 
   Future<void> _submit() async {
@@ -212,7 +277,7 @@ class _PharmacistEntryScreenState extends State<PharmacistEntryScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     if (!_gateOpen) {
-      return const Scaffold(body: SizedBox.shrink());
+      return _buildLockedState(context);
     }
 
     final colors = Theme.of(context).colorScheme;
@@ -315,6 +380,49 @@ class _PharmacistEntryScreenState extends State<PharmacistEntryScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLockedState(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Pharmacist Entry'),
+        actions: [CommonAppBarActions(settings: widget.settings)],
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.lock_outline_rounded,
+                  size: 64, color: colors.onSurfaceVariant),
+              const SizedBox(height: 16),
+              Text(
+                'Pharmacist Entry is locked',
+                style: text.titleMedium,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Enter the four-digit PIN to add medications to the schedule.',
+                style: text.bodyMedium?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed: () => _runPinGate(),
+                icon: const Icon(Icons.lock_open_rounded),
+                label: const Text('Unlock'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
