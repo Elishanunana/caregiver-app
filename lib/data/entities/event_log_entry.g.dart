@@ -22,13 +22,14 @@ class EventLogEntryAdapter extends TypeAdapter<EventLogEntry> {
       timestamp: fields[2] as String?,
       details: fields[3] as String?,
       syncedFlag: fields[4] as int,
+      transport: fields[5] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, EventLogEntry obj) {
     writer
-      ..writeByte(5)
+      ..writeByte(6)
       ..writeByte(0)
       ..write(obj.eventId)
       ..writeByte(1)
@@ -38,7 +39,9 @@ class EventLogEntryAdapter extends TypeAdapter<EventLogEntry> {
       ..writeByte(3)
       ..write(obj.details)
       ..writeByte(4)
-      ..write(obj.syncedFlag);
+      ..write(obj.syncedFlag)
+      ..writeByte(5)
+      ..write(obj.transport);
   }
 
   @override

@@ -223,7 +223,7 @@ void main() {
       expect(didSeed, isTrue);
       expect(elderRepo.count, 1);
       expect(scheduleRepo.count, 4);
-      expect(eventRepo.count, 6);
+      expect(eventRepo.count, 8);
       expect(elderRepo.getPrimary()?.name, 'Akua Mensah');
     });
 

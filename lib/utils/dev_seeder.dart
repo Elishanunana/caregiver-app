@@ -135,6 +135,9 @@ class DevSeeder {
     DateTime at(int h, int m) =>
         DateTime.utc(today.year, today.month, today.day, h, m);
 
+    final sosAt = at(14, 0);
+    final ackAt = sosAt.add(const Duration(seconds: 3));
+
     final events = <EventLogEntry>[
       EventLogEntry(
         eventId: 5001,
@@ -163,6 +166,7 @@ class DevSeeder {
         timestamp: at(8, 30).toIso8601String(),
         details: 'Metformin 500 mg — no confirmation after 3 prompts',
         syncedFlag: 1,
+        transport: SyncTransport.sms, // SMS fallback
       ),
       EventLogEntry(
         eventId: 5005,
@@ -177,6 +181,22 @@ class DevSeeder {
         timestamp: at(13, 5).toIso8601String(),
         details: 'Diclofenac 50 mg',
         syncedFlag: 1,
+      ),
+      EventLogEntry(
+        eventId: 5007,
+        eventType: 'sos_triggered',
+        timestamp: sosAt.toIso8601String(),
+        details: '{"source":"button","triggered_at":"${sosAt.toIso8601String()}"}',
+        syncedFlag: 1,
+        transport: SyncTransport.sms, // SMS fallback
+      ),
+      EventLogEntry(
+        eventId: 5008,
+        eventType: 'sos_acknowledged',
+        timestamp: ackAt.toIso8601String(),
+        details: '{"sos_event_id":5007,"acknowledged_at":"${ackAt.toIso8601String()}"}',
+        syncedFlag: 1,
+        transport: SyncTransport.sms, // SMS fallback
       ),
     ];
 

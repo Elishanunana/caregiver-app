@@ -51,7 +51,7 @@ class SyncEngine {
     required SyncQueueRepository syncRepo,
     required ConnectivityArbiter arbiter,
     required SyncStateNotifier stateNotifier,
-    this.pollInterval = const Duration(seconds: 30),
+    this.pollInterval = const Duration(seconds: 5),
     this.clientFactory,
   })  : _settings = settings,
         _eventRepo = eventRepo,
@@ -60,7 +60,8 @@ class SyncEngine {
         _stateNotifier = stateNotifier;
 
   /// Begin periodic syncing. The first cycle fires immediately so the
-  /// caregiver doesn't wait 30 seconds after foregrounding the app.
+  /// caregiver doesn't wait a full poll interval after foregrounding
+  /// the app. Subsequent cycles run every [pollInterval] (default 5s).
   void start() {
     if (_disposed) return;
     _timer?.cancel();

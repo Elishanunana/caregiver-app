@@ -71,36 +71,47 @@ class TodayStatusService {
   }
 
   DoseStatus _computeStatus(
-    MedicationSchedule s,
-    List<EventLogEntry> dayEvents,
-    DateTime forDate,
-  ) {
-    // Match events to this schedule by drug-name+dosage substring in
-    // the details field. The hub's reminder emitter writes details as
-    // "<drug> <dosage>" (e.g., "Amlodipine 5 mg") — we tolerate any
-    // trailing diagnostic text such as "no confirmation after 3 prompts".
-    final tag = '${s.drugName} ${s.dosage}'.trim();
-    final related = dayEvents
-        .where((e) => (e.details ?? '').contains(tag))
-        .toList(growable: false);
+  MedicationSchedule s,
+  List<EventLogEntry> dayEvents,
+  DateTime forDate,
+) {
+  final scheduledAt = _scheduledDateTime(s, forDate);
+  if (scheduledAt == null) return DoseStatus.pending;
 
-    final hasConfirmed = related.any((e) => e.eventType == _evtDoseConfirmed);
-    if (hasConfirmed) return DoseStatus.taken;
+  // Correlation window: 30 minutes before the scheduled dose to
+  // tolerate early reminders, and 4 hours after to allow for late
+  // confirmations. Without this window, an elder with the same
+  // medication scheduled at multiple times (e.g., Metformin at 08:00
+  // and 20:00) would have a missed-dose event for the morning dose
+  // also taint the evening dose, because substring matching on
+  // "${drug} ${dosage}" alone cannot distinguish them.
+  final windowStart = scheduledAt.subtract(const Duration(minutes: 30));
+  final windowEnd = scheduledAt.add(const Duration(hours: 4));
 
-    final hasMissed = related.any((e) => e.eventType == _evtDoseMissed);
-    if (hasMissed) return DoseStatus.missed;
-
-    final hasReminder = related.any((e) => e.eventType == _evtReminderDue);
-    if (hasReminder) return DoseStatus.awaiting;
-
-    // No related events yet. If the scheduled time hasn't passed, it's
-    // simply Pending; if it has passed without a reminder firing the
-    // elder is on the hub's grace window — we keep it Pending until
-    // either a reminder fires or the scheduler logs a missed dose.
-    final dueToday = _scheduledDateTime(s, forDate);
-    if (dueToday == null) return DoseStatus.pending;
-    return DoseStatus.pending;
+  bool inWindow(EventLogEntry e) {
+    final ts = e.timestamp;
+    if (ts == null || ts.isEmpty) return false;
+    final dt = DateTime.tryParse(ts)?.toLocal();
+    if (dt == null) return false;
+    return !dt.isBefore(windowStart) && !dt.isAfter(windowEnd);
   }
+
+  final tag = '${s.drugName} ${s.dosage}'.trim();
+  final related = dayEvents
+      .where((e) => (e.details ?? '').contains(tag) && inWindow(e))
+      .toList(growable: false);
+
+  final hasConfirmed = related.any((e) => e.eventType == _evtDoseConfirmed);
+  if (hasConfirmed) return DoseStatus.taken;
+
+  final hasMissed = related.any((e) => e.eventType == _evtDoseMissed);
+  if (hasMissed) return DoseStatus.missed;
+
+  final hasReminder = related.any((e) => e.eventType == _evtReminderDue);
+  if (hasReminder) return DoseStatus.awaiting;
+
+  return DoseStatus.pending;
+}
 
   /// Combine a schedule's HH:MM timeDue with [forDate]. Returns null
   /// if the time string is malformed (defensive — the hub validates

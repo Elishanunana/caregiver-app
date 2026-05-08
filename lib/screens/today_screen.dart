@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -64,9 +65,6 @@ class _TodayScreenState extends State<TodayScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final text   = Theme.of(context).textTheme;
-
     final elder = widget.elderRepo.getPrimary();
     if (elder == null) {
       return Scaffold(
@@ -74,13 +72,6 @@ class _TodayScreenState extends State<TodayScreen> {
         body: const Center(child: Text('No elder profile registered.')),
       );
     }
-
-    final today = DateTime.now();
-    final rows = _statusService.computeRows(
-      elderId: elder.elderId ?? 0,
-      forDate: today,
-    );
-    final pendingSos = _findUnackSos();
 
     return Scaffold(
       appBar: AppBar(
@@ -104,36 +95,78 @@ class _TodayScreenState extends State<TodayScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: _refresh,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          children: [
-            if (pendingSos != null)
-              _SosBanner(event: pendingSos, colors: colors, text: text),
-            _SectionHeader(label: _todayHeader(today), text: text),
-            if (rows.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(24),
-                child: Text('No medications scheduled for today.'),
-              )
-            else
-              ...rows.map((r) =>
-                  _ScheduleTile(row: r, colors: colors, text: text)),
-            const SizedBox(height: 24),
-            _LastSyncFooter(),
-          ],
+        // The Consumer below rebuilds whenever the SyncEngine signals
+        // sync state changes — including endSync() after newly-applied
+        // events have been written to Hive. That re-runs computeRows
+        // and _findUnackSos against the fresh local state, so badges
+        // and banners reflect arrivals from the hub without requiring
+        // a manual pull-to-refresh.
+        child: Consumer<SyncStateNotifier>(
+          builder: (context, _, __) {
+            final today = DateTime.now();
+            final rows = _statusService.computeRows(
+              elderId: elder.elderId ?? 0,
+              forDate: today,
+            );
+            final pendingSos = _findUnackSos();
+            final colors = Theme.of(context).colorScheme;
+            final text = Theme.of(context).textTheme;
+
+            return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              children: [
+                if (pendingSos != null)
+                  _SosBanner(event: pendingSos, colors: colors, text: text),
+                _SectionHeader(label: _todayHeader(today), text: text),
+                if (rows.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text('No medications scheduled for today.'),
+                  )
+                else
+                  ...rows.map((r) =>
+                      _ScheduleTile(row: r, colors: colors, text: text)),
+                const SizedBox(height: 24),
+                _LastSyncFooter(),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 
+  /// Returns the most recent sos_triggered event that does not yet have
+  /// a corresponding sos_acknowledged event after it.
+  ///
+  /// Future-dated triggers (e.g. seed artefacts representing a
+  /// hypothetical 14:00 SOS while the wall clock reads 13:00) are
+  /// excluded — they represent demo data, not unresolved emergencies,
+  /// and including them would shadow earlier live SOS events whose
+  /// banner the caregiver actually needs to see.
   EventLogEntry? _findUnackSos() {
     final all = widget.eventRepo.listAll();
-    final sosEvents = all.where((e) => e.eventType == 'sos_triggered').toList();
-    if (sosEvents.isEmpty) return null;
-    sosEvents.sort((a, b) =>
-        (b.timestamp ?? '').compareTo(a.timestamp ?? ''));
-    return sosEvents.first; // most recent; ack mechanism comes in Task 21
+    final nowUtc = DateTime.now().toUtc();
+
+    final triggered = all
+        .where((e) {
+          if (e.eventType != 'sos_triggered') return false;
+          final dt = DateTime.tryParse(e.timestamp ?? '');
+          return dt != null && !dt.toUtc().isAfter(nowUtc);
+        })
+        .toList()
+      ..sort((a, b) => (b.timestamp ?? '').compareTo(a.timestamp ?? ''));
+
+    if (triggered.isEmpty) return null;
+    final mostRecent = triggered.first;
+    final triggeredAt = mostRecent.timestamp ?? '';
+
+    final hasLaterAck = all.any((e) =>
+        e.eventType == 'sos_acknowledged' &&
+        (e.timestamp ?? '').compareTo(triggeredAt) > 0);
+
+    return hasLaterAck ? null : mostRecent;
   }
 
   String _todayHeader(DateTime d) {
@@ -158,20 +191,62 @@ class _SosBanner extends StatelessWidget {
     required this.text,
   });
 
+  /// Parse the JSON-encoded details field, returning a map. Returns an
+  /// empty map for non-JSON or absent details — the banner falls back
+  /// to displaying just the timestamp in that case.
+  Map<String, dynamic> _parseDetails() {
+    final raw = event.details;
+    if (raw == null || raw.isEmpty) return const {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) return decoded;
+    } catch (_) {
+      // Pre-JSON seed data uses plain strings; ignore.
+    }
+    return const {};
+  }
+
+  /// "17:57" from a 2026-05-06T17:57:52.930Z-style timestamp. Falls
+  /// back to the raw string if parsing fails.
+  String _formatTime(String? iso) {
+    if (iso == null || iso.isEmpty) return '';
+    try {
+      final dt = DateTime.parse(iso).toLocal();
+      final hh = dt.hour.toString().padLeft(2, '0');
+      final mm = dt.minute.toString().padLeft(2, '0');
+      return '$hh:$mm';
+    } catch (_) {
+      return iso;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final details = _parseDetails();
+    final source = (details['source'] as String?) ?? 'unknown';
+    final triggeredAt = _formatTime(
+        (details['triggered_at'] as String?) ?? event.timestamp);
+
+    final sourceLabel = switch (source) {
+      'voice' => 'voice command',
+      'button' => 'physical button',
+      'gpio' => 'physical button',
+      _ => source,
+    };
+
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: colors.errorContainer,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.error, width: 1.5),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.warning_amber_rounded,
-              color: colors.onErrorContainer, size: 36),
-          const SizedBox(width: 14),
+          Icon(Icons.warning_amber_rounded, color: colors.error, size: 32),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -179,25 +254,24 @@ class _SosBanner extends StatelessWidget {
                 Text(
                   'SOS — Unacknowledged',
                   style: text.titleMedium?.copyWith(
-                    color: colors.onErrorContainer,
+                    color: colors.error,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 4),
                 Text(
-                  event.timestamp ?? 'no timestamp',
-                  style: text.bodySmall?.copyWith(
-                    color: colors.onErrorContainer.withValues(alpha: 0.8),
-                    fontFamily: 'monospace',
+                  'Triggered at $triggeredAt via $sourceLabel.',
+                  style: text.bodyMedium?.copyWith(
+                    color: colors.onErrorContainer,
                   ),
                 ),
-                if (event.details != null && event.details!.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    event.details!,
-                    style: TextStyle(color: colors.onErrorContainer),
+                const SizedBox(height: 4),
+                Text(
+                  'Hub will auto-acknowledge shortly. SMS alerts dispatched.',
+                  style: text.bodySmall?.copyWith(
+                    color: colors.onErrorContainer.withValues(alpha: 0.8),
                   ),
-                ],
+                ),
               ],
             ),
           ),

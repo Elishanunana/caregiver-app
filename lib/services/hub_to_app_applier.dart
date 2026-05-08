@@ -54,7 +54,12 @@ class HubToAppApplier {
         _syncRepo = syncRepo;
 
   /// Apply a batch of event JSON objects from the hub.
-  Future<ApplyResult> applyBatch(List<Map<String, dynamic>> rawEvents) async {
+  /// The [transport] parameter tracks how this batch arrived
+  /// (defaults to wifi_rest, but SMS-in can override this later).
+  Future<ApplyResult> applyBatch(
+    List<Map<String, dynamic>> rawEvents, {
+    String transport = SyncTransport.wifiRest,
+  }) async {
     int inserted = 0;
     int skipped  = 0;
     final ackIds = <int>[];
@@ -88,6 +93,7 @@ class HubToAppApplier {
         timestamp: raw['timestamp'] as String?,
         details: detailsString,
         syncedFlag: 1, // we are applying it now → it's synced locally
+        transport: transport, // Set the transport metadata
       );
       await _eventRepo.insertFromHub(entry);
       inserted++;

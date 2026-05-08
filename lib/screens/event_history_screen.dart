@@ -19,11 +19,13 @@ import '_app_bar_actions.dart';
 /// Day grouping is rendered with sticky headers (Today / Yesterday /
 /// "<day> <month>") to make the date axis visible at a glance.
 ///
-/// Per-row transport pathway (Wi-Fi vs SMS) is currently rendered as
-/// 'Wi-Fi' for every event because Task 17's HubApiClient is the only
-/// pathway feeding events into the local store. Task 21 introduces the
-/// SMS pathway and per-event transport tracking; the badge will stay
-/// in place and start showing accurate per-event values then.
+/// Per-row transport pathway is read from EventLogEntry.transport,
+/// which the apply pipeline sets at ingest time based on the channel
+/// the batch arrived through. Wi-Fi REST is the active inbound channel
+/// today; SMS-in is provisioned in the schema for the resilient
+/// fallback path described in Section 3 of the project report. Records
+/// persisted before the transport field was added (or seeded without
+/// it) fall back to displaying Wi-Fi.
 class EventHistoryScreen extends StatefulWidget {
   final EventLogRepository eventRepo;
   final SecureSettingsService settings;
@@ -297,7 +299,10 @@ class _EventTile extends StatelessWidget {
                     ),
                   ],
                   const SizedBox(height: 8),
-                  _TransportBadge(transport: SyncTransport.wifiRest, colors: colors),
+                  _TransportBadge(
+                    transport: event.transport ?? SyncTransport.wifiRest, 
+                    colors: colors
+                  ),
                 ],
               ),
             ),
