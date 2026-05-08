@@ -13,11 +13,13 @@ class EventTypeMeta {
   final String label;
   final IconData icon;
   final _AccentRole accentRole;
+  final bool defaultVisible;
 
   const EventTypeMeta._({
     required this.label,
     required this.icon,
     required this.accentRole,
+    this.defaultVisible = true,
   });
 
   /// Resolve [colors] for this event type. Kept as a method so theme
@@ -52,6 +54,7 @@ class EventTypeMeta {
   /// All event types with first-class display support, in the order
   /// they should appear in filter UIs (most actionable first).
   static const List<MapEntry<String, EventTypeMeta>> orderedKnown = [
+    // ─── Caregiver-relevant (visible by default) ───
     MapEntry('sos_triggered', EventTypeMeta._(
       label: 'SOS triggered',
       icon: Icons.warning_amber_rounded,
@@ -82,7 +85,82 @@ class EventTypeMeta {
       icon: Icons.power_rounded,
       accentRole: _AccentRole.neutral,
     )),
+
+    // ─── System / diagnostic (hidden by default — opt-in via filter) ───
+    MapEntry('system_boot', EventTypeMeta._(
+      label: 'Hub started',
+      icon: Icons.power_settings_new_rounded,
+      accentRole: _AccentRole.neutral,
+      defaultVisible: false,
+    )),
+    MapEntry('system_shutdown', EventTypeMeta._(
+      label: 'Hub stopped',
+      icon: Icons.power_off_rounded,
+      accentRole: _AccentRole.neutral,
+      defaultVisible: false,
+    )),
+    MapEntry('system_fault', EventTypeMeta._(
+      label: 'Hub fault',
+      icon: Icons.error_outline_rounded,
+      accentRole: _AccentRole.danger,
+      defaultVisible: false,
+    )),
+    MapEntry('tts_repeated', EventTypeMeta._(
+      label: 'Prompt repeated',
+      icon: Icons.replay_rounded,
+      accentRole: _AccentRole.neutral,
+      defaultVisible: false,
+    )),
+    MapEntry('schedule_read_aloud', EventTypeMeta._(
+      label: 'Schedule read aloud',
+      icon: Icons.record_voice_over_rounded,
+      accentRole: _AccentRole.neutral,
+      defaultVisible: false,
+    )),
+    MapEntry('sos_dispatch_complete', EventTypeMeta._(
+      label: 'SOS dispatch result',
+      icon: Icons.send_rounded,
+      accentRole: _AccentRole.warn,
+      defaultVisible: false,
+    )),
+    MapEntry('sos_acknowledged', EventTypeMeta._(
+      label: 'SOS acknowledged',
+      icon: Icons.task_alt_rounded,
+      accentRole: _AccentRole.success,
+      defaultVisible: false,
+    )),
+    MapEntry('sms_payload_accepted', EventTypeMeta._(
+      label: 'SMS accepted',
+      icon: Icons.sms_rounded,
+      accentRole: _AccentRole.neutral,
+      defaultVisible: false,
+    )),
+    MapEntry('sms_payload_rejected', EventTypeMeta._(
+      label: 'SMS rejected',
+      icon: Icons.sms_failed_rounded,
+      accentRole: _AccentRole.danger,
+      defaultVisible: false,
+    )),
+    MapEntry('sms_outbound_dispatched', EventTypeMeta._(
+      label: 'SMS sent to caregivers',
+      icon: Icons.outbox_rounded,
+      accentRole: _AccentRole.neutral,
+      defaultVisible: false,
+    )),
+    MapEntry('schedule_synced_via_wifi', EventTypeMeta._(
+      label: 'Schedule synced',
+      icon: Icons.cloud_done_rounded,
+      accentRole: _AccentRole.neutral,
+      defaultVisible: false,
+    )),
   ];
+
+  /// Keys that should be enabled in the History filter on first display.
+  static Set<String> get defaultVisibleKeys =>
+      orderedKnown
+          .where((e) => e.value.defaultVisible)
+          .map((e) => e.key)
+          .toSet();
 
   static const EventTypeMeta _unknown = EventTypeMeta._(
     label: 'System event',

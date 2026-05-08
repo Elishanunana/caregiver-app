@@ -6,6 +6,7 @@ import '../data/values/event_type_meta.dart';
 import '../data/values/values.dart';
 import '../services/secure_settings_service.dart';
 import '_app_bar_actions.dart';
+
 /// Event History — a chronological, filterable audit log of all events
 /// the app has received from the hub.
 ///
@@ -44,12 +45,15 @@ class _EventHistoryScreenState extends State<EventHistoryScreen> {
   @override
   void initState() {
     super.initState();
-    _enabledTypes = EventTypeMeta.orderedKnown.map((e) => e.key).toSet();
+    _enabledTypes = EventTypeMeta.defaultVisibleKeys;
   }
+
+  static bool _setEquals(Set<String> a, Set<String> b) =>
+      a.length == b.length && a.containsAll(b);
 
   bool get _isFiltered =>
       _dateRange != null ||
-      _enabledTypes.length != EventTypeMeta.orderedKnown.length;
+      !_setEquals(_enabledTypes, EventTypeMeta.defaultVisibleKeys);
 
   List<EventLogEntry> _filteredEvents() {
     final all = _dateRange == null
@@ -58,9 +62,6 @@ class _EventHistoryScreenState extends State<EventHistoryScreen> {
             start: _dateRange!.start,
             end: _dateRange!.end.add(const Duration(days: 1)),
           );
-    if (_enabledTypes.length == EventTypeMeta.orderedKnown.length) {
-      return all;
-    }
     return all.where((e) => _enabledTypes.contains(e.eventType)).toList();
   }
 
@@ -82,7 +83,7 @@ class _EventHistoryScreenState extends State<EventHistoryScreen> {
 
   void _clearFilters() {
     setState(() {
-      _enabledTypes = EventTypeMeta.orderedKnown.map((e) => e.key).toSet();
+      _enabledTypes = EventTypeMeta.defaultVisibleKeys;
       _dateRange = null;
     });
   }
