@@ -182,7 +182,9 @@ class HubApiClient {
       List<Map<String, dynamic>> changes) async {
     final uri = Uri.parse(
         '$baseUrl${ApiConstants.basePath}${ApiConstants.scheduleSync}');
-    final response = await _authenticatedPost(uri, {'changes': changes});
+    // Hub reads the batch under the 'schedules' key (see LocalRestAPI
+    // sync_schedules → data["schedules"]). Must match exactly.
+    final response = await _authenticatedPost(uri, {'schedules': changes});
     return _decodeJson(response);
   }
 

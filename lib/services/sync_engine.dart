@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../data/entities/sync_queue_entry.dart';
 import '../data/repositories/event_log_repository.dart';
 import '../data/repositories/sync_queue_repository.dart';
+import '../data/values/values.dart';
 import 'connectivity_arbiter.dart';
 import 'hub_api_client.dart';
 import 'hub_to_app_applier.dart';
@@ -14,16 +16,16 @@ import 'sync_state_notifier.dart';
 ///
 /// On each cycle:
 ///   1. Ask the arbiter whether to proceed (hub reachable? not in cooldown?)
-///   2. If yes, fetch the unsynced batch from /events/unsynced
-///   3. Apply via HubToAppApplier (idempotent inserts + ack-for-change-id detection)
-///   4. POST the event_ids to /events/ack
-///   5. If the response indicates more available, drain in a follow-up cycle
-///   6. Update the SyncStateNotifier so the UI reflects the outcome
+///   2. Pull the unsynced Hub→App event batch from /events/unsynced,
+///      apply via HubToAppApplier, and POST acks to /events/ack.
+///   3. Push pending App→Hub schedule changes to /schedule/sync and mark
+///      the confirmed ones synced locally.
+///   4. Update the SyncStateNotifier so the UI reflects the outcome.
 ///
-/// Error handling:
-///   • Hub unreachable → arbiter records failure; cycle returns Skipped
-///   • HTTP/parse error → cycle marked Error, error message surfaced to UI
-///   • Apply errors → cycle marked Error; the SyncQueue is left intact for retry
+/// The App→Hub push is the Wi-Fi arm of the hybrid schedule-sync pathway
+/// (Section 3.5.4). The SMS pathway remains the offline fallback; both
+/// carry the same change_id, and the hub's idempotency check dedupes a
+/// change that happens to arrive via both.
 class SyncEngine {
   final SecureSettingsService _settings;
   final EventLogRepository _eventRepo;
@@ -135,10 +137,8 @@ class SyncEngine {
     }
   }
 
-  /// Drain the hub's unsynced queue via Wi-Fi REST. Pages until empty
-  /// or the safety limit is hit (we cap at 5 pages per cycle to avoid
-  /// monopolising the foreground app on a long backlog — the next
-  /// cycle will pick up the rest).
+  /// One full Wi-Fi cycle: pull Hub→App events, then push App→Hub
+  /// schedule changes.
   Future<void> _runWifiCycle(HubApiClient client) async {
     final applier = HubToAppApplier(
       eventRepo: _eventRepo,
@@ -148,6 +148,7 @@ class SyncEngine {
     int totalApplied = 0;
     int totalSkipped = 0;
 
+    // ── Phase 1: pull Hub→App events (paged, drains up to 5 pages) ──────
     for (var page = 0; page < 5; page++) {
       final response = await client.fetchUnsyncedEvents();
       if (response.events.isEmpty) break;
@@ -164,10 +165,85 @@ class SyncEngine {
       if (!response.hasMore) break;
     }
 
+    // ── Phase 2: push pending App→Hub schedule changes over REST ───────
+    final pushed = await _pushPendingSchedules(client);
+    if (kDebugMode && pushed > 0) {
+      debugPrint('[SyncEngine] pushed $pushed schedule change(s) to hub.');
+    }
+
     _stateNotifier.endSync(
       outcome: SyncOutcome.success,
       applied: totalApplied,
       skipped: totalSkipped,
     );
+  }
+
+  /// Push every pending App→Hub schedule change to /schedule/sync.
+  ///
+  /// Each pending entry carries the same pipe-delimited canonical the SMS
+  /// pathway signs (MED|type|change_id|elder_id|drug|dosage|time|days|
+  /// active|timestamp|HMAC=...). We rebuild the REST change object from
+  /// those fields — no HMAC needed on REST, since the bearer token
+  /// authenticates the channel. Entries the hub confirms ('ok') or has
+  /// already seen ('duplicate') are marked synced; anything else is left
+  /// pending for the next cycle to retry.
+  ///
+  /// Returns the number of changes newly applied by the hub.
+  Future<int> _pushPendingSchedules(HubApiClient client) async {
+    final pending = _syncRepo.listPendingAppToHub();
+    if (pending.isEmpty) return 0;
+
+    final changes = <Map<String, dynamic>>[];
+    for (final entry in pending) {
+      final change = _changeFromEntry(entry);
+      if (change != null) changes.add(change);
+    }
+    if (changes.isEmpty) return 0;
+
+    final response = await client.syncScheduleBatch(changes);
+
+    final results = response['results'];
+    if (results is! List) return 0;
+
+    int applied = 0;
+    for (final r in results) {
+      if (r is! Map) continue;
+      final status = r['status'] as String?;
+      final changeId = r['change_id'] as String?;
+      if (changeId == null || changeId.isEmpty) continue;
+
+      // 'ok' → newly applied; 'duplicate' → hub already has it. Both mean
+      // the change is durably on the hub, so stop resending it.
+      if (status == 'ok' || status == 'duplicate') {
+        await _syncRepo.updateState(changeId, SyncState.synced);
+        if (status == 'ok') applied++;
+      }
+    }
+    return applied;
+  }
+
+  /// Rebuild a REST schedule-change object from a pending SyncQueue entry.
+  /// Returns null (skipping the entry) if the payload isn't a recognised
+  /// MED canonical string.
+  Map<String, dynamic>? _changeFromEntry(SyncQueueEntry entry) {
+    final parts = entry.payload.split('|');
+    // MED|type|change_id|elder_id|drug|dosage|time|days|active|ts|HMAC=...
+    if (parts.length < 10 || parts[0] != 'MED') return null;
+
+    final elderId = int.tryParse(parts[3]);
+    final active = int.tryParse(parts[8]);
+    if (elderId == null || active == null) return null;
+
+    return {
+      'change_id':     entry.changeId.isNotEmpty ? entry.changeId : parts[2],
+      'elder_id':      elderId,
+      'drug_name':     parts[4],
+      'dosage':        parts[5],
+      'time_due':      parts[6],
+      'days_of_week':  parts[7],
+      'active':        active,
+      'prescribed_by': PrescribedBy.pharmacist,
+      'timestamp':     entry.timestamp ?? parts[9],
+    };
   }
 }
