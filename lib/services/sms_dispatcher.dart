@@ -33,10 +33,14 @@ class SmsDispatcher {
     required String body,
   }) async {
     try {
-      final uri = Uri(
-        scheme: 'sms',
-        path: recipient,
-        queryParameters: {'body': body},
+      // Build the sms: URI by hand. Routing the body through Uri's
+      // queryParameters map encodes spaces as '+', which some OEM SMS
+      // apps (notably HiOS on Android 8.1) mishandle — dropping the body
+      // entirely once the query string grows long. Percent-encoding the
+      // body with encodeComponent and appending it as a raw ?body=...
+      // is handled far more reliably across composers.
+      final uri = Uri.parse(
+        'sms:$recipient?body=${Uri.encodeComponent(body)}',
       );
 
       if (!await canLaunchUrl(uri)) {

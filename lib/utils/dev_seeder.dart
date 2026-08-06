@@ -10,18 +10,19 @@ import '../data/values/values.dart';
 /// Development-only seeder.
 ///
 /// Populates the four Hive boxes with a realistic, defense-presentable
-/// dataset so screens can be built and reviewed before the REST sync
-/// integration (Task 17 onwards) is live.
+/// dataset so screens can be built and reviewed before/alongside the
+/// REST sync integration.
 ///
-/// The seed represents one elderly Ghanaian woman in Kumasi — Akua
-/// Mensah — managing hypertension, diabetes, and arthritis medications,
-/// with two adult children registered as caregivers. The event history
-/// reflects a normal day's adherence pattern with one missed dose.
+/// The seed represents one elderly Ghanaian woman in Kumasi — Maame Akua
+/// Owusu — managing hypertension (Amlodipine) and mild cognitive
+/// impairment (Donepezil), with one adult child registered as caregiver.
+/// This mirrors the hub's cleaned demo dataset exactly (same elder,
+/// same two medications, same caregiver number) so the app and hub tell
+/// one coherent story during the defense.
 ///
 /// IMPORTANT: This seeder is invoked only when the elder profiles box
-/// is empty (i.e., on a fresh install during development). It is never
-/// called in production builds. We will gate this behind a compile-time
-/// flag in Task 22.
+/// is empty (i.e., on a fresh install during development), or explicitly
+/// via reseed(). It is never called in production builds.
 class DevSeeder {
   final ElderProfileRepository _elderRepo;
   final MedicationScheduleRepository _scheduleRepo;
@@ -49,7 +50,8 @@ class DevSeeder {
   }
 
   /// Wipe and reseed unconditionally. Useful during development to
-  /// reset the app to a known state.
+  /// reset the app to a known state. Clears only the Hive data boxes —
+  /// secure settings (pairing token, hub URL, hub SIM) are untouched.
   Future<void> reseed() async {
     await _elderRepo.clear();
     await _scheduleRepo.clear();
@@ -64,9 +66,9 @@ class DevSeeder {
     final now = _utcNowIso();
     await _elderRepo.upsert(ElderProfile(
       elderId: 1,
-      name: 'Akua Mensah',
+      name: 'Maame Akua Owusu',
       language: 'twi',
-      caregiverPhones: '+233244000001,+233244000002',
+      caregiverPhones: '+233200510903',
       createdAt: now,
       lastModified: now,
     ));
@@ -79,8 +81,8 @@ class DevSeeder {
         scheduleId: 101,
         elderId: 1,
         drugName: 'Amlodipine',
-        dosage: '5 mg',
-        timeDue: '07:30',
+        dosage: '5mg',
+        timeDue: '08:00',
         daysOfWeek: 'DAILY',
         active: 1,
         prescribedBy: PrescribedBy.pharmacist,
@@ -90,36 +92,12 @@ class DevSeeder {
       MedicationSchedule(
         scheduleId: 102,
         elderId: 1,
-        drugName: 'Metformin',
-        dosage: '500 mg',
-        timeDue: '08:00',
-        daysOfWeek: 'DAILY',
-        active: 1,
-        prescribedBy: PrescribedBy.pharmacist,
-        syncMethod: SyncMethod.appWifi,
-        lastModified: now,
-      ),
-      MedicationSchedule(
-        scheduleId: 103,
-        elderId: 1,
-        drugName: 'Metformin',
-        dosage: '500 mg',
+        drugName: 'Donepezil',
+        dosage: '5mg',
         timeDue: '20:00',
         daysOfWeek: 'DAILY',
         active: 1,
         prescribedBy: PrescribedBy.pharmacist,
-        syncMethod: SyncMethod.appWifi,
-        lastModified: now,
-      ),
-      MedicationSchedule(
-        scheduleId: 104,
-        elderId: 1,
-        drugName: 'Diclofenac',
-        dosage: '50 mg',
-        timeDue: '13:00',
-        daysOfWeek: 'MON,WED,FRI',
-        active: 1,
-        prescribedBy: PrescribedBy.caregiver,
         syncMethod: SyncMethod.appWifi,
         lastModified: now,
       ),
@@ -142,48 +120,19 @@ class DevSeeder {
       EventLogEntry(
         eventId: 5001,
         eventType: 'reminder_dose_due',
-        timestamp: at(7, 30).toIso8601String(),
-        details: 'Amlodipine 5 mg',
+        timestamp: at(8, 0).toIso8601String(),
+        details: 'Amlodipine 5mg',
         syncedFlag: 1,
       ),
       EventLogEntry(
         eventId: 5002,
         eventType: 'dose_confirmed',
-        timestamp: at(7, 32).toIso8601String(),
-        details: 'Amlodipine 5 mg',
+        timestamp: at(8, 2).toIso8601String(),
+        details: 'Amlodipine 5mg',
         syncedFlag: 1,
       ),
       EventLogEntry(
         eventId: 5003,
-        eventType: 'reminder_dose_due',
-        timestamp: at(8, 0).toIso8601String(),
-        details: 'Metformin 500 mg',
-        syncedFlag: 1,
-      ),
-      EventLogEntry(
-        eventId: 5004,
-        eventType: 'dose_missed',
-        timestamp: at(8, 30).toIso8601String(),
-        details: 'Metformin 500 mg — no confirmation after 3 prompts',
-        syncedFlag: 1,
-        transport: SyncTransport.sms, // SMS fallback
-      ),
-      EventLogEntry(
-        eventId: 5005,
-        eventType: 'reminder_dose_due',
-        timestamp: at(13, 0).toIso8601String(),
-        details: 'Diclofenac 50 mg',
-        syncedFlag: 1,
-      ),
-      EventLogEntry(
-        eventId: 5006,
-        eventType: 'dose_confirmed',
-        timestamp: at(13, 5).toIso8601String(),
-        details: 'Diclofenac 50 mg',
-        syncedFlag: 1,
-      ),
-      EventLogEntry(
-        eventId: 5007,
         eventType: 'sos_triggered',
         timestamp: sosAt.toIso8601String(),
         details: '{"source":"button","triggered_at":"${sosAt.toIso8601String()}"}',
@@ -191,10 +140,25 @@ class DevSeeder {
         transport: SyncTransport.sms, // SMS fallback
       ),
       EventLogEntry(
-        eventId: 5008,
+        eventId: 5004,
         eventType: 'sos_acknowledged',
         timestamp: ackAt.toIso8601String(),
-        details: '{"sos_event_id":5007,"acknowledged_at":"${ackAt.toIso8601String()}"}',
+        details: '{"sos_event_id":5003,"acknowledged_at":"${ackAt.toIso8601String()}"}',
+        syncedFlag: 1,
+        transport: SyncTransport.sms, // SMS fallback
+      ),
+      EventLogEntry(
+        eventId: 5005,
+        eventType: 'reminder_dose_due',
+        timestamp: at(20, 0).toIso8601String(),
+        details: 'Donepezil 5mg',
+        syncedFlag: 1,
+      ),
+      EventLogEntry(
+        eventId: 5006,
+        eventType: 'dose_missed',
+        timestamp: at(20, 30).toIso8601String(),
+        details: 'Donepezil 5mg — no confirmation after 3 prompts',
         syncedFlag: 1,
         transport: SyncTransport.sms, // SMS fallback
       ),

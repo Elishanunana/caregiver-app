@@ -267,7 +267,8 @@ class _SosBanner extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Hub will auto-acknowledge shortly. SMS alerts dispatched.',
+                  'An emergency alert has been sent to caregivers. '
+                  'Please check on your family member now.',
                   style: text.bodySmall?.copyWith(
                     color: colors.onErrorContainer.withValues(alpha: 0.8),
                   ),
