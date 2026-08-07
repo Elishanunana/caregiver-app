@@ -460,7 +460,8 @@ class _FilterSheetState extends State<_FilterSheet> {
         20,
         MediaQuery.of(context).viewInsets.bottom + 20,
       ),
-      child: Column(
+      child: SingleChildScrollView(
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -543,6 +544,7 @@ class _FilterSheetState extends State<_FilterSheet> {
             ],
           ),
         ],
+      ),
       ),
     );
   }
